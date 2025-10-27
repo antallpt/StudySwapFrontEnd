@@ -21,16 +21,6 @@ Diese Anleitung ist speziell für Windows-Benutzer optimiert, die die App einfac
   npm --version
   ```
 
-### 2. Expo CLI
-- **Installation**: Öffnen Sie die Eingabeaufforderung (cmd) als Administrator und führen Sie aus:
-  ```cmd
-  npm install -g @expo/cli
-  ```
-- **Verifikation**:
-  ```cmd
-  expo --version
-  ```
-
 ### 3. Android-Handy Vorbereitung
 - **Expo Go App installieren**: 
   1. Öffnen Sie den Google Play Store auf Ihrem Android-Handy
