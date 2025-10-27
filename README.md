@@ -56,6 +56,7 @@ npx expo start
 
 ### Schritt 2: QR-Code scannen
 1. **QR-Code wird angezeigt**: Nach dem Start sehen Sie einen QR-Code in der Eingabeaufforderung
+   - Falls in der Konsole unter dem QR-Code Using development build steht, drücken Sie die Taste "s" damit das Build auf Expo Go wechselt
 2. **Expo Go öffnen**: Öffnen Sie die Expo Go App auf Ihrem Android-Handy
 3. **QR-Code scannen**: 
    - Tippen Sie auf "Scan QR Code" in der Expo Go App
