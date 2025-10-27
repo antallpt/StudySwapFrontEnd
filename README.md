@@ -1,12 +1,10 @@
 # StudySwap - React Native App
 
-Eine React Native App für den Austausch von Studienmaterialien zwischen Studenten.
 
-## Schnellstart mit Expo Go (Empfohlen für Windows)
+## Schnellstart mit Expo Go
 
-Diese Anleitung ist speziell für Windows-Benutzer optimiert, die die App einfach und schnell auf ihrem Android-Handy testen möchten.
 
-## Voraussetzungen (Minimal Setup)
+## Voraussetzungen 
 
 ### 1. Node.js und npm
 - **Download**: [https://nodejs.org/](https://nodejs.org/)
@@ -21,14 +19,14 @@ Diese Anleitung ist speziell für Windows-Benutzer optimiert, die die App einfac
   npm --version
   ```
 
-### 3. Android-Handy Vorbereitung
+### 2. Android-Handy Vorbereitung
 - **Expo Go App installieren**: 
   1. Öffnen Sie den Google Play Store auf Ihrem Android-Handy
   2. Suchen Sie nach "Expo Go"
   3. Installieren Sie die offizielle Expo Go App
 - **WiFi-Verbindung**: Stellen Sie sicher, dass Ihr Handy und Computer im gleichen WiFi-Netzwerk sind
 
-## Installation und Setup (Schritt-für-Schritt)
+## Installation und Setup
 
 ### 1. Projekt herunterladen
 - https://github.com/antallpt/StudySwapFrontEnd/tree/master
@@ -48,7 +46,7 @@ npm install
 ```
 **Hinweis**: Dieser Schritt kann 2-5 Minuten dauern.
 
-## App mit Expo Go starten (Einfachste Methode)
+## App mit Expo Go starten 
 
 ### Schritt 1: Development Server starten
 ```cmd
