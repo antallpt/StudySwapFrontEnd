@@ -643,160 +643,160 @@ class ApiService {
         });
     }
 
-        // Product creation methods
-        async createProduct(productData: {
-            title: string;
-            description: string;
-            price: number;
-            category: string;
-            images: any[]; // Array of image files
-        }): Promise<any> {
-            // Create FormData for multipart form submission
-            const formData = new FormData();
-            formData.append('title', productData.title);
-            formData.append('description', productData.description);
-            formData.append('price', productData.price.toString());
-            formData.append('category', productData.category);
+    // Product creation methods
+    async createProduct(productData: {
+        title: string;
+        description: string;
+        price: number;
+        category: string;
+        images: any[]; // Array of image files
+    }): Promise<any> {
+        // Create FormData for multipart form submission
+        const formData = new FormData();
+        formData.append('title', productData.title);
+        formData.append('description', productData.description);
+        formData.append('price', productData.price.toString());
+        formData.append('category', productData.category);
 
-            // Add images to form data with better Android compatibility
-            productData.images.forEach((image, index) => {
-                console.log(`Adding image ${index}:`, {
-                    uri: image.uri,
-                    type: image.type,
-                    fileName: image.fileName,
-                    uriType: typeof image.uri
-                });
-                
-                formData.append('images', {
-                    uri: image.uri,
-                    type: image.type || 'image/jpeg',
-                    name: image.fileName || `image_${index}.jpg`,
-                } as any);
+        // Add images to form data with better Android compatibility
+        productData.images.forEach((image, index) => {
+            console.log(`Adding image ${index}:`, {
+                uri: image.uri,
+                type: image.type,
+                fileName: image.fileName,
+                uriType: typeof image.uri
             });
 
-            console.log('Creating product with data:', {
-                title: productData.title,
-                description: productData.description,
-                price: productData.price,
-                category: productData.category,
-                imageCount: productData.images.length
-            });
+            formData.append('images', {
+                uri: image.uri,
+                type: image.type || 'image/jpeg',
+                name: image.fileName || `image_${index}.jpg`,
+            } as any);
+        });
 
-            // Use direct fetch for FormData to avoid issues with makeAuthenticatedRequest
-            let { accessToken, refreshToken } = await getStoredTokens();
-            
-            if (!accessToken || !refreshToken) {
-                throw new ApiError('No access token available. Please log in again.', 401);
-            }
+        console.log('Creating product with data:', {
+            title: productData.title,
+            description: productData.description,
+            price: productData.price,
+            category: productData.category,
+            imageCount: productData.images.length
+        });
 
-            // Check if access token is expired or close to expiring
-            if (this.isTokenExpired(accessToken)) {
-                console.log('Access token is expired, refreshing before product creation...');
-                try {
-                    if (!this.isRefreshing) {
-                        this.isRefreshing = true;
-                        this.refreshPromise = this.performTokenRefresh(refreshToken!);
-                    }
-                    
-                    const refreshResponse = await this.refreshPromise;
-                    await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
-                    accessToken = refreshResponse.accessToken;
-                    refreshToken = refreshResponse.refreshToken;
-                    
-                    console.log('Token refreshed before product creation, proceeding');
-                } catch (refreshError: any) {
-                    console.error('Token refresh failed before product creation:', refreshError);
-                    throw new ApiError('Authentication failed. Please log in again.', 401);
-                } finally {
-                    this.refreshPromise = null;
-                    this.isRefreshing = false;
-                }
-            }
+        // Use direct fetch for FormData to avoid issues with makeAuthenticatedRequest
+        let { accessToken, refreshToken } = await getStoredTokens();
 
-            const url = `${this.baseURL}/products`;
-            
-            console.log('Making product creation request to:', url);
-            console.log('FormData contents:', {
-                hasTitle: formData.has('title'),
-                hasDescription: formData.has('description'),
-                hasPrice: formData.has('price'),
-                hasCategory: formData.has('category'),
-                imageCount: productData.images.length
-            });
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'StudySwap-Mobile/1.0.0',
-                    'Authorization': `Bearer ${accessToken}`,
-                    // Don't set Content-Type for FormData, let fetch handle it
-                },
-                body: formData,
-                // Add timeout for Android compatibility
-                signal: AbortSignal.timeout(30000), // 30 seconds timeout
-            });
-
-            console.log('Product creation response status:', response.status);
-            console.log('Product creation response headers:', Object.fromEntries(response.headers.entries()));
-
-            // Handle 401/403 responses with token refresh
-            if (response.status === 401 || response.status === 403) {
-                console.log('Authentication error during product creation, attempting token refresh...');
-                try {
-                    if (!this.isRefreshing) {
-                        this.isRefreshing = true;
-                        this.refreshPromise = this.performTokenRefresh(refreshToken!);
-                    }
-                    
-                    const refreshResponse = await this.refreshPromise;
-                    await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
-                    
-                    // Retry the product creation request
-                    const retryResponse = await fetch(url, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'User-Agent': 'StudySwap-Mobile/1.0.0',
-                            'Authorization': `Bearer ${refreshResponse.accessToken}`,
-                        },
-                        body: formData,
-                        signal: AbortSignal.timeout(30000), // 30 seconds timeout
-                    });
-
-                    if (!retryResponse.ok) {
-                        const errorData = await retryResponse.json().catch(() => ({}));
-                        throw new ApiError(
-                            errorData.message || `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
-                            retryResponse.status
-                        );
-                    }
-
-                    const retryResponseData = await retryResponse.json();
-                    console.log('Product created successfully after token refresh');
-                    return retryResponseData;
-                } catch (refreshError: any) {
-                    console.error('Token refresh failed during product creation:', refreshError);
-                    throw new ApiError('Authentication failed. Please log in again.', 401);
-                } finally {
-                    this.refreshPromise = null;
-                    this.isRefreshing = false;
-                }
-            }
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.log('Product creation error response data:', errorData);
-                throw new ApiError(
-                    errorData.message || `HTTP ${response.status}: ${response.statusText}`,
-                    response.status
-                );
-            }
-
-            const responseData = await response.json();
-            console.log('Product created successfully:', responseData);
-            return responseData;
+        if (!accessToken || !refreshToken) {
+            throw new ApiError('No access token available. Please log in again.', 401);
         }
+
+        // Check if access token is expired or close to expiring
+        if (this.isTokenExpired(accessToken)) {
+            console.log('Access token is expired, refreshing before product creation...');
+            try {
+                if (!this.isRefreshing) {
+                    this.isRefreshing = true;
+                    this.refreshPromise = this.performTokenRefresh(refreshToken!);
+                }
+
+                const refreshResponse = await this.refreshPromise;
+                await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
+                accessToken = refreshResponse.accessToken;
+                refreshToken = refreshResponse.refreshToken;
+
+                console.log('Token refreshed before product creation, proceeding');
+            } catch (refreshError: any) {
+                console.error('Token refresh failed before product creation:', refreshError);
+                throw new ApiError('Authentication failed. Please log in again.', 401);
+            } finally {
+                this.refreshPromise = null;
+                this.isRefreshing = false;
+            }
+        }
+
+        const url = `${this.baseURL}/products`;
+
+        console.log('Making product creation request to:', url);
+        console.log('FormData contents:', {
+            hasTitle: formData.has('title'),
+            hasDescription: formData.has('description'),
+            hasPrice: formData.has('price'),
+            hasCategory: formData.has('category'),
+            imageCount: productData.images.length
+        });
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'StudySwap-Mobile/1.0.0',
+                'Authorization': `Bearer ${accessToken}`,
+                // Don't set Content-Type for FormData, let fetch handle it
+            },
+            body: formData,
+            // Add timeout for Android compatibility
+            signal: AbortSignal.timeout(30000), // 30 seconds timeout
+        });
+
+        console.log('Product creation response status:', response.status);
+        console.log('Product creation response headers:', Object.fromEntries(response.headers.entries()));
+
+        // Handle 401/403 responses with token refresh
+        if (response.status === 401 || response.status === 403) {
+            console.log('Authentication error during product creation, attempting token refresh...');
+            try {
+                if (!this.isRefreshing) {
+                    this.isRefreshing = true;
+                    this.refreshPromise = this.performTokenRefresh(refreshToken!);
+                }
+
+                const refreshResponse = await this.refreshPromise;
+                await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
+
+                // Retry the product creation request
+                const retryResponse = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'User-Agent': 'StudySwap-Mobile/1.0.0',
+                        'Authorization': `Bearer ${refreshResponse.accessToken}`,
+                    },
+                    body: formData,
+                    signal: AbortSignal.timeout(30000), // 30 seconds timeout
+                });
+
+                if (!retryResponse.ok) {
+                    const errorData = await retryResponse.json().catch(() => ({}));
+                    throw new ApiError(
+                        errorData.message || `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
+                        retryResponse.status
+                    );
+                }
+
+                const retryResponseData = await retryResponse.json();
+                console.log('Product created successfully after token refresh');
+                return retryResponseData;
+            } catch (refreshError: any) {
+                console.error('Token refresh failed during product creation:', refreshError);
+                throw new ApiError('Authentication failed. Please log in again.', 401);
+            } finally {
+                this.refreshPromise = null;
+                this.isRefreshing = false;
+            }
+        }
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.log('Product creation error response data:', errorData);
+            throw new ApiError(
+                errorData.message || `HTTP ${response.status}: ${response.statusText}`,
+                response.status
+            );
+        }
+
+        const responseData = await response.json();
+        console.log('Product created successfully:', responseData);
+        return responseData;
+    }
 }
 
 // Create and export API service instance

@@ -39,7 +39,9 @@
         "cleartextTrafficPermitted": true,
         "domainConfig": [
           {
-            "domains": ["31.97.217.79"],
+            "domains": [
+              "31.97.217.79"
+            ],
             "cleartextTrafficPermitted": true
           }
         ]
