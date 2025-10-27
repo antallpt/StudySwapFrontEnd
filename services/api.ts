@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from '../config/api';
-import { clearTokens, generateDeviceId, getStoredTokens, storeTokens } from './tokenService';
+import { getStoredTokens, storeTokens } from './tokenService';
 
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
@@ -103,6 +103,7 @@ class ApiService {
     // Helper method to perform token refresh with proper error handling
     private async performTokenRefresh(refreshToken: string): Promise<any> {
         // Get the same device ID that was used during registration/login
+        const { generateDeviceId } = await import('./tokenService');
         const deviceId = await generateDeviceId();
 
         console.log('Attempting token refresh with:', {
@@ -288,11 +289,12 @@ class ApiService {
                             const errorData = await retryResponse.json().catch(() => ({}));
                             console.log('Retry error response data:', errorData);
 
-                                // If retry also fails with 401/403, the token refresh might have failed
-                                if (retryResponse.status === 401 || retryResponse.status === 403) {
-                                    console.log('Retry also failed with auth error, clearing tokens');
-                                    await clearTokens();
-                                }
+                            // If retry also fails with 401/403, the token refresh might have failed
+                            if (retryResponse.status === 401 || retryResponse.status === 403) {
+                                console.log('Retry also failed with auth error, clearing tokens');
+                                const { clearTokens } = await import('./tokenService');
+                                await clearTokens();
+                            }
 
                             throw new ApiError(
                                 errorData.message || `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
@@ -309,11 +311,12 @@ class ApiService {
                 } catch (refreshError: any) {
                     console.error('Token refresh failed:', refreshError);
 
-                        // If refresh token is invalid, clear tokens and logout
-                        if (refreshError.status === 401 || refreshError.message?.includes('Invalid or expired refresh token')) {
-                            console.log('Refresh token is invalid, clearing tokens');
-                            await clearTokens();
-                        }
+                    // If refresh token is invalid, clear tokens and logout
+                    if (refreshError.status === 401 || refreshError.message?.includes('Invalid or expired refresh token')) {
+                        console.log('Refresh token is invalid, clearing tokens');
+                        const { clearTokens } = await import('./tokenService');
+                        await clearTokens();
+                    }
 
                     throw new ApiError('Authentication failed. Please log in again.', 401);
                 } finally {
@@ -655,15 +658,8 @@ class ApiService {
         formData.append('price', productData.price.toString());
         formData.append('category', productData.category);
 
-        // Add images to form data with better Android compatibility
+        // Add images to form data
         productData.images.forEach((image, index) => {
-            console.log(`Adding image ${index}:`, {
-                uri: image.uri,
-                type: image.type,
-                fileName: image.fileName,
-                uriType: typeof image.uri
-            });
-
             formData.append('images', {
                 uri: image.uri,
                 type: image.type || 'image/jpeg',
@@ -679,120 +675,12 @@ class ApiService {
             imageCount: productData.images.length
         });
 
-        // Use direct fetch for FormData to avoid issues with makeAuthenticatedRequest
-        let { accessToken, refreshToken } = await getStoredTokens();
-
-        if (!accessToken || !refreshToken) {
-            throw new ApiError('No access token available. Please log in again.', 401);
-        }
-
-        // Check if access token is expired or close to expiring
-        if (this.isTokenExpired(accessToken)) {
-            console.log('Access token is expired, refreshing before product creation...');
-            try {
-                if (!this.isRefreshing) {
-                    this.isRefreshing = true;
-                    this.refreshPromise = this.performTokenRefresh(refreshToken!);
-                }
-
-                const refreshResponse = await this.refreshPromise;
-                await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
-                accessToken = refreshResponse.accessToken;
-                refreshToken = refreshResponse.refreshToken;
-
-                console.log('Token refreshed before product creation, proceeding');
-            } catch (refreshError: any) {
-                console.error('Token refresh failed before product creation:', refreshError);
-                throw new ApiError('Authentication failed. Please log in again.', 401);
-            } finally {
-                this.refreshPromise = null;
-                this.isRefreshing = false;
-            }
-        }
-
-        const url = `${this.baseURL}/products`;
-
-        console.log('Making product creation request to:', url);
-        console.log('FormData contents:', {
-            hasTitle: formData.has('title'),
-            hasDescription: formData.has('description'),
-            hasPrice: formData.has('price'),
-            hasCategory: formData.has('category'),
-            imageCount: productData.images.length
-        });
-
-        const response = await fetch(url, {
+        // Use the authenticated request method with FormData
+        return this.makeAuthenticatedRequest<any>('/products', {
             method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'StudySwap-Mobile/1.0.0',
-                'Authorization': `Bearer ${accessToken}`,
-                // Don't set Content-Type for FormData, let fetch handle it
-            },
             body: formData,
-            // Add timeout for Android compatibility
-            signal: AbortSignal.timeout(30000), // 30 seconds timeout
+            // Don't set Content-Type, let fetch set it for FormData
         });
-
-        console.log('Product creation response status:', response.status);
-        console.log('Product creation response headers:', Object.fromEntries(response.headers.entries()));
-
-        // Handle 401/403 responses with token refresh
-        if (response.status === 401 || response.status === 403) {
-            console.log('Authentication error during product creation, attempting token refresh...');
-            try {
-                if (!this.isRefreshing) {
-                    this.isRefreshing = true;
-                    this.refreshPromise = this.performTokenRefresh(refreshToken!);
-                }
-
-                const refreshResponse = await this.refreshPromise;
-                await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
-
-                // Retry the product creation request
-                const retryResponse = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'User-Agent': 'StudySwap-Mobile/1.0.0',
-                        'Authorization': `Bearer ${refreshResponse.accessToken}`,
-                    },
-                    body: formData,
-                    signal: AbortSignal.timeout(30000), // 30 seconds timeout
-                });
-
-                if (!retryResponse.ok) {
-                    const errorData = await retryResponse.json().catch(() => ({}));
-                    throw new ApiError(
-                        errorData.message || `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
-                        retryResponse.status
-                    );
-                }
-
-                const retryResponseData = await retryResponse.json();
-                console.log('Product created successfully after token refresh');
-                return retryResponseData;
-            } catch (refreshError: any) {
-                console.error('Token refresh failed during product creation:', refreshError);
-                throw new ApiError('Authentication failed. Please log in again.', 401);
-            } finally {
-                this.refreshPromise = null;
-                this.isRefreshing = false;
-            }
-        }
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.log('Product creation error response data:', errorData);
-            throw new ApiError(
-                errorData.message || `HTTP ${response.status}: ${response.statusText}`,
-                response.status
-            );
-        }
-
-        const responseData = await response.json();
-        console.log('Product created successfully:', responseData);
-        return responseData;
     }
 }
 

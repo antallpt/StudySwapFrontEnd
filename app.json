@@ -34,18 +34,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.antallepetit.studyswap",
-      "usesCleartextTraffic": true,
-      "networkSecurityConfig": {
-        "cleartextTrafficPermitted": true,
-        "domainConfig": [
-          {
-            "domains": [
-              "31.97.217.79"
-            ],
-            "cleartextTrafficPermitted": true
-          }
-        ]
-      }
+      "usesCleartextTraffic": true
     },
     "web": {
       "output": "static",
