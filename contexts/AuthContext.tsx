@@ -1,6 +1,6 @@
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { apiService } from '../services/api';
-import { clearTokens, getStoredTokens, storeTokens } from '../services/tokenService';
+import { clearTokens, generateDeviceId, getStoredTokens, storeTokens } from '../services/tokenService';
 
 interface User {
     userId?: string;
@@ -115,7 +115,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
 
             // Generate device ID for refresh request
-            const { generateDeviceId } = await import('../services/tokenService');
             const deviceId = await generateDeviceId();
 
             const response = await apiService.refreshToken({

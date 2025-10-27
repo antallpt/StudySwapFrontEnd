@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from '../config/api';
-import { getStoredTokens, storeTokens } from './tokenService';
+import { clearTokens, generateDeviceId, getStoredTokens, storeTokens } from './tokenService';
 
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
@@ -103,7 +103,6 @@ class ApiService {
     // Helper method to perform token refresh with proper error handling
     private async performTokenRefresh(refreshToken: string): Promise<any> {
         // Get the same device ID that was used during registration/login
-        const { generateDeviceId } = await import('./tokenService');
         const deviceId = await generateDeviceId();
 
         console.log('Attempting token refresh with:', {
@@ -289,12 +288,11 @@ class ApiService {
                             const errorData = await retryResponse.json().catch(() => ({}));
                             console.log('Retry error response data:', errorData);
 
-                            // If retry also fails with 401/403, the token refresh might have failed
-                            if (retryResponse.status === 401 || retryResponse.status === 403) {
-                                console.log('Retry also failed with auth error, clearing tokens');
-                                const { clearTokens } = await import('./tokenService');
-                                await clearTokens();
-                            }
+                                // If retry also fails with 401/403, the token refresh might have failed
+                                if (retryResponse.status === 401 || retryResponse.status === 403) {
+                                    console.log('Retry also failed with auth error, clearing tokens');
+                                    await clearTokens();
+                                }
 
                             throw new ApiError(
                                 errorData.message || `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
@@ -311,12 +309,11 @@ class ApiService {
                 } catch (refreshError: any) {
                     console.error('Token refresh failed:', refreshError);
 
-                    // If refresh token is invalid, clear tokens and logout
-                    if (refreshError.status === 401 || refreshError.message?.includes('Invalid or expired refresh token')) {
-                        console.log('Refresh token is invalid, clearing tokens');
-                        const { clearTokens } = await import('./tokenService');
-                        await clearTokens();
-                    }
+                        // If refresh token is invalid, clear tokens and logout
+                        if (refreshError.status === 401 || refreshError.message?.includes('Invalid or expired refresh token')) {
+                            console.log('Refresh token is invalid, clearing tokens');
+                            await clearTokens();
+                        }
 
                     throw new ApiError('Authentication failed. Please log in again.', 401);
                 } finally {
