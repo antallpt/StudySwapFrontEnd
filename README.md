@@ -31,6 +31,7 @@ Diese Anleitung ist speziell für Windows-Benutzer optimiert, die die App einfac
 ## Installation und Setup (Schritt-für-Schritt)
 
 ### 1. Projekt herunterladen
+- https://github.com/antallpt/StudySwapFrontEnd/tree/master
 - Laden Sie das Projekt als ZIP-Datei herunter
 - Entpacken Sie die ZIP-Datei in einen Ordner (z.B. `C:\StudySwap\`)
 
