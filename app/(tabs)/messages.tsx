@@ -200,11 +200,13 @@ export default function MessagesPage() {
                 onPress={() => handleChatPress(item.id)}
                 activeOpacity={0.7}
             >
-                <Avatar
-                    firstName={otherUsers[otherUserId]?.firstName || (isSeller ? 'B' : 'S')}
-                    lastName={otherUsers[otherUserId]?.lastName || ''}
-                    size={50}
-                />
+                <View style={styles.avatarContainer}>
+                    <Avatar
+                        firstName={otherUsers[otherUserId]?.firstName || (isSeller ? 'B' : 'S')}
+                        lastName={otherUsers[otherUserId]?.lastName || ''}
+                        size={50}
+                    />
+                </View>
 
                 <View style={styles.chatContent}>
                     <View style={styles.chatHeader}>
@@ -270,6 +272,9 @@ export default function MessagesPage() {
             backgroundColor: colors.background,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
+        },
+        avatarContainer: {
+            marginRight: spacing.md,
         },
         chatAvatar: {
             width: 50,

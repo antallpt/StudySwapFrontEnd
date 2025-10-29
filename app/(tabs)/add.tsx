@@ -148,6 +148,10 @@ export default function AddPage() {
             Alert.alert('Error', 'Please enter a description');
             return;
         }
+        if (description.length > 255) {
+            Alert.alert('Error', 'Description must be 255 characters or less');
+            return;
+        }
         if (!price.trim()) {
             Alert.alert('Error', 'Please enter a price');
             return;
@@ -229,10 +233,14 @@ export default function AddPage() {
 
             let errorMessage = 'Failed to create listing. Please try again.';
             let shouldLogout = false;
+            let shouldRetry = false;
 
             if (error.status === 401 || error.message?.includes('Authentication failed') || error.message?.includes('Invalid or expired refresh token')) {
                 errorMessage = 'Your session has expired. Please log in again.';
                 shouldLogout = true;
+            } else if (error.status === 403 && error.message?.includes('token has been refreshed')) {
+                errorMessage = 'Your session has expired. The token has been refreshed. Please try uploading again.';
+                shouldRetry = true;
             } else if (error.status === 403) {
                 errorMessage = 'You do not have permission to create listings.';
             } else if (error.message) {
@@ -244,11 +252,14 @@ export default function AddPage() {
                 errorMessage,
                 [
                     {
-                        text: 'OK',
+                        text: shouldRetry ? 'Try Again' : 'OK',
                         onPress: () => {
                             if (shouldLogout) {
                                 // The AuthContext will handle the logout automatically
                                 // when it detects invalid tokens
+                            } else if (shouldRetry) {
+                                // User can try uploading again - the token has been refreshed
+                                console.log('User can retry upload - token has been refreshed');
                             }
                         }
                     }
@@ -409,6 +420,12 @@ export default function AddPage() {
             textAlignVertical: 'top',
             fontSize: 16,
         },
+        characterCount: {
+            ...typography.caption,
+            textAlign: 'right',
+            marginTop: spacing.xs,
+            fontSize: 12,
+        },
         categoryContainer: {
             flexDirection: 'row',
             flexWrap: 'wrap',
@@ -550,7 +567,11 @@ export default function AddPage() {
                             numberOfLines={4}
                             textAlignVertical="top"
                             autoCapitalize="sentences"
+                            maxLength={255}
                         />
+                        <Text style={[styles.characterCount, { color: description.length > 200 ? colors.error : colors.text.tertiary }]}>
+                            {description.length}/255
+                        </Text>
                     </View>
                 </View>
 

@@ -15,7 +15,7 @@ import {
 import { borderRadius, colors, shadows, spacing, typography } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiError, apiService } from '../services/api';
-import { testApiConnection } from '../services/testApi';
+import { generateDeviceId } from '../services/tokenService';
 
 export default function SignUpPage() {
     const [formData, setFormData] = useState({
@@ -54,12 +54,16 @@ export default function SignUpPage() {
         setIsLoading(true);
 
         try {
+            // Generate device ID for registration
+            const deviceId = await generateDeviceId();
+
             const response = await apiService.register({
                 email,
                 password,
                 firstName,
                 lastName,
                 university,
+                deviceId,
             });
 
             if (response.isLoggedIn === 'true' && response.accessToken && response.refreshToken) {
@@ -101,27 +105,6 @@ export default function SignUpPage() {
         }
     };
 
-    const handleGoogleSignUp = () => {
-        // TODO: Implement Google OAuth
-        Alert.alert('Google Sign Up', 'Google integration coming soon!');
-    };
-
-    const handleTestConnection = async () => {
-        console.log('Testing API connection...');
-        const result = await testApiConnection();
-
-        if (result.success) {
-            Alert.alert(
-                'Test Result',
-                `Connection successful!\nWorking URL: ${result.workingUrl}`
-            );
-        } else {
-            Alert.alert(
-                'Test Result',
-                `Connection failed: ${result.error}`
-            );
-        }
-    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -226,31 +209,6 @@ export default function SignUpPage() {
                                 </Text>
                             </TouchableOpacity>
 
-                            {/* Test Connection Button - Remove this after debugging */}
-                            <TouchableOpacity
-                                style={[styles.testButton]}
-                                onPress={handleTestConnection}
-                            >
-                                <Text style={styles.testButtonText}>
-                                    Test Connection
-                                </Text>
-                            </TouchableOpacity>
-
-                            {/* Divider */}
-                            <View style={styles.divider}>
-                                <View style={styles.dividerLine} />
-                                <Text style={styles.dividerText}>or</Text>
-                                <View style={styles.dividerLine} />
-                            </View>
-
-                            {/* Google Sign Up */}
-                            <TouchableOpacity
-                                style={styles.googleButton}
-                                onPress={handleGoogleSignUp}
-                            >
-                                <Text style={styles.googleButtonText}>Continue with Google</Text>
-                            </TouchableOpacity>
-
                             {/* Terms */}
                             <View style={styles.termsContainer}>
                                 <Text style={styles.termsText}>
@@ -337,43 +295,6 @@ const styles = StyleSheet.create({
         backgroundColor: colors.text.tertiary,
     },
     signUpButtonText: {
-        ...typography.button,
-        color: colors.cardBackground,
-    },
-    testButton: {
-        backgroundColor: colors.secondary,
-        borderRadius: borderRadius.md,
-        paddingVertical: spacing.md,
-        alignItems: 'center',
-        marginTop: spacing.sm,
-        ...shadows.card,
-    },
-    testButtonText: {
-        ...typography.button,
-        color: colors.cardBackground,
-    },
-    divider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: spacing.lg,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: colors.border,
-    },
-    dividerText: {
-        ...typography.caption,
-        marginHorizontal: spacing.md,
-    },
-    googleButton: {
-        backgroundColor: colors.social.google,
-        borderRadius: borderRadius.md,
-        paddingVertical: spacing.md,
-        alignItems: 'center',
-        ...shadows.card,
-    },
-    googleButtonText: {
         ...typography.button,
         color: colors.cardBackground,
     },

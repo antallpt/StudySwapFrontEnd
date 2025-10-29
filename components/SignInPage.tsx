@@ -75,11 +75,6 @@ export default function SignInPage() {
         }
     };
 
-    const handleGoogleSignIn = () => {
-        // TODO: Implement Google OAuth
-        // For now, navigate directly to home page
-        router.push('/(public)/home' as any);
-    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -130,21 +125,6 @@ export default function SignInPage() {
                             <Text style={styles.signInButtonText}>
                                 {isLoading ? 'Signing in...' : 'Sign In'}
                             </Text>
-                        </TouchableOpacity>
-
-                        {/* Divider */}
-                        <View style={styles.divider}>
-                            <View style={styles.dividerLine} />
-                            <Text style={styles.dividerText}>or</Text>
-                            <View style={styles.dividerLine} />
-                        </View>
-
-                        {/* Google Sign In */}
-                        <TouchableOpacity
-                            style={styles.googleButton}
-                            onPress={handleGoogleSignIn}
-                        >
-                            <Text style={styles.googleButtonText}>Continue with Google</Text>
                         </TouchableOpacity>
 
                         {/* Forgot Password */}
@@ -227,31 +207,6 @@ const styles = StyleSheet.create({
         backgroundColor: colors.text.tertiary,
     },
     signInButtonText: {
-        ...typography.button,
-        color: colors.cardBackground,
-    },
-    divider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: spacing.lg,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: colors.border,
-    },
-    dividerText: {
-        ...typography.caption,
-        marginHorizontal: spacing.md,
-    },
-    googleButton: {
-        backgroundColor: colors.social.google,
-        borderRadius: borderRadius.md,
-        paddingVertical: spacing.md,
-        alignItems: 'center',
-        ...shadows.card,
-    },
-    googleButtonText: {
         ...typography.button,
         color: colors.cardBackground,
     },

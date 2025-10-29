@@ -23,6 +23,7 @@ export interface RegisterRequest {
     firstName: string;
     lastName: string;
     university: string;
+    deviceId: string;
 }
 
 export interface RegisterResponse {
@@ -110,13 +111,29 @@ class ApiService {
             deviceId,
             refreshTokenLength: refreshToken.length,
             refreshTokenStart: refreshToken.substring(0, 10) + '...',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            isRefreshing: this.isRefreshing
         });
 
-        return await this.refreshToken({
-            refreshToken,
-            deviceId,
-        });
+        try {
+            const result = await this.refreshToken({
+                refreshToken,
+                deviceId,
+            });
+
+            console.log('Token refresh successful:', {
+                hasAccessToken: !!result.accessToken,
+                hasRefreshToken: !!result.refreshToken,
+                accessTokenLength: result.accessToken?.length || 0,
+                refreshTokenLength: result.refreshToken?.length || 0,
+                newRefreshTokenStart: result.refreshToken?.substring(0, 10) + '...' || 'null'
+            });
+
+            return result;
+        } catch (error) {
+            console.error('Token refresh failed in performTokenRefresh:', error);
+            throw error;
+        }
     }
 
     // Helper method to check if token is expired
@@ -124,7 +141,9 @@ class ApiService {
         try {
             const payload = JSON.parse(atob(token.split('.')[1]));
             const now = Math.floor(Date.now() / 1000);
-            return now >= payload.exp;
+            // Add 5 minute buffer to avoid unnecessary refreshes
+            const bufferTime = 5 * 60; // 5 minutes in seconds
+            return now >= (payload.exp - bufferTime);
         } catch (e) {
             return true; // If we can't parse it, consider it expired
         }
@@ -135,6 +154,38 @@ class ApiService {
         endpoint: string,
         options: RequestInit = {}
     ): Promise<T> {
+        // Check if we're already refreshing tokens to prevent race conditions
+        if (this.isRefreshing) {
+            console.log('Token refresh in progress, waiting for completion...', {
+                endpoint,
+                isRefreshing: this.isRefreshing,
+                hasRefreshPromise: !!this.refreshPromise
+            });
+
+            try {
+                await this.refreshPromise;
+                console.log('Token refresh completed, getting fresh tokens...');
+
+                // Get fresh tokens after refresh completes
+                const { accessToken: newAccessToken, refreshToken: newRefreshToken } = await getStoredTokens();
+                if (!newAccessToken || !newRefreshToken) {
+                    console.log('No tokens available after refresh, throwing error');
+                    throw new ApiError('No access token available after refresh. Please log in again.', 401);
+                }
+
+                console.log('Using fresh tokens for request:', {
+                    accessTokenLength: newAccessToken.length,
+                    refreshTokenLength: newRefreshToken.length,
+                    refreshTokenStart: newRefreshToken.substring(0, 10) + '...'
+                });
+
+                return this.makeAuthenticatedRequestWithTokens<T>(endpoint, options, newAccessToken, newRefreshToken);
+            } catch (error) {
+                console.error('Error waiting for token refresh:', error);
+                throw error;
+            }
+        }
+
         let { accessToken, refreshToken } = await getStoredTokens();
 
         console.log('Using tokens for request to:', endpoint, {
@@ -149,34 +200,16 @@ class ApiService {
             throw new ApiError('No access token available. Please log in again.', 401);
         }
 
-        // Check if access token is expired or close to expiring (within 5 minutes)
-        if (this.isTokenExpired(accessToken)) {
-            console.log('Access token is expired, refreshing before request...');
-            try {
-                // Use mutex to prevent multiple simultaneous refresh attempts
-                if (!this.isRefreshing) {
-                    this.isRefreshing = true;
-                    this.refreshPromise = this.performTokenRefresh(refreshToken);
-                }
+        return this.makeAuthenticatedRequestWithTokens<T>(endpoint, options, accessToken, refreshToken);
+    }
 
-                const refreshResponse = await this.refreshPromise;
-
-                // Immediately update tokens in storage
-                await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
-
-                // Update local variables
-                accessToken = refreshResponse.accessToken;
-                refreshToken = refreshResponse.refreshToken;
-
-                console.log('Token refreshed proactively, proceeding with request');
-            } catch (refreshError: any) {
-                console.error('Proactive token refresh failed:', refreshError);
-                throw new ApiError('Authentication failed. Please log in again.', 401);
-            } finally {
-                this.refreshPromise = null;
-                this.isRefreshing = false;
-            }
-        }
+    // Helper method to make request with specific tokens
+    private async makeAuthenticatedRequestWithTokens<T>(
+        endpoint: string,
+        options: RequestInit,
+        accessToken: string,
+        refreshToken: string
+    ): Promise<T> {
 
         const url = `${this.baseURL}${endpoint}`;
 
@@ -206,6 +239,8 @@ class ApiService {
                 'Authorization': `Bearer ${accessToken?.substring(0, 20)}...`,
                 'Content-Type': isFormData ? 'multipart/form-data' : 'application/json'
             });
+            console.log('Request method:', options.method || 'GET');
+            console.log('Is FormData:', isFormData);
             const response = await fetch(url, config);
 
             console.log('Response status:', response.status);
@@ -216,6 +251,33 @@ class ApiService {
                 console.log('Authentication error, attempting to refresh token...');
                 console.log('Access token being used:', accessToken?.substring(0, 50) + '...');
                 console.log('Endpoint that failed:', endpoint);
+
+                // Don't retry FormData requests as they can only be consumed once
+                if (isFormData) {
+                    console.log('FormData request cannot be retried, refreshing token for next request');
+                    try {
+                        if (!this.isRefreshing) {
+                            this.isRefreshing = true;
+                            this.refreshPromise = this.performTokenRefresh(refreshToken!);
+                        }
+
+                        const refreshResponse = await this.refreshPromise;
+                        await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
+
+                        console.log('Token refreshed for FormData request, but cannot retry');
+                    } catch (refreshError: any) {
+                        console.error('Token refresh failed for FormData request:', refreshError);
+                    } finally {
+                        this.refreshPromise = null;
+                        this.isRefreshing = false;
+                    }
+
+                    // For FormData requests, provide a more helpful error message
+                    throw new ApiError(
+                        'Your session has expired. The token has been refreshed. Please try uploading again.',
+                        response.status
+                    );
+                }
 
                 // Try to decode the JWT to see if it's expired
                 try {
@@ -233,20 +295,31 @@ class ApiService {
                     console.log('Could not decode JWT token:', e);
                 }
 
-                try {
-                    // Use mutex to prevent multiple simultaneous refresh attempts
-                    if (!this.isRefreshing) {
-                        this.isRefreshing = true;
-                        this.refreshPromise = this.performTokenRefresh(refreshToken!);
-                    }
+                // Use mutex to prevent multiple simultaneous refresh attempts
+                if (!this.isRefreshing) {
+                    console.log('Starting token refresh...', {
+                        endpoint,
+                        refreshTokenStart: refreshToken.substring(0, 10) + '...',
+                        refreshTokenLength: refreshToken.length
+                    });
+                    this.isRefreshing = true;
+                    this.refreshPromise = this.performTokenRefresh(refreshToken);
+                } else {
+                    console.log('Token refresh already in progress, waiting...', {
+                        endpoint,
+                        isRefreshing: this.isRefreshing,
+                        hasRefreshPromise: !!this.refreshPromise
+                    });
+                }
 
+                try {
                     const refreshResponse = await this.refreshPromise;
 
                     // Immediately update tokens in storage to prevent race conditions
                     await storeTokens(refreshResponse.accessToken, refreshResponse.refreshToken);
 
-                    // Wait a bit to ensure tokens are fully stored and backend has processed rotation
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    // Longer delay to ensure tokens are fully processed on backend
+                    await new Promise(resolve => setTimeout(resolve, 1000));
 
                     console.log('Refresh response:', {
                         hasAccessToken: !!refreshResponse.accessToken,
@@ -255,16 +328,15 @@ class ApiService {
                     });
 
                     if (refreshResponse.accessToken && refreshResponse.refreshToken) {
-                        console.log('Tokens already updated in storage after refresh');
-
-                        // Update the refreshToken variable for the retry
-                        refreshToken = refreshResponse.refreshToken;
-
-                        // Also update the accessToken variable for the retry
-                        accessToken = refreshResponse.accessToken;
+                        console.log('Tokens updated in storage after refresh');
 
                         // Retry the request with the new token
                         console.log('Token refreshed, retrying request...');
+                        console.log('Retry with new token:', {
+                            accessTokenLength: refreshResponse.accessToken.length,
+                            accessTokenStart: refreshResponse.accessToken.substring(0, 50) + '...',
+                            endpoint: url
+                        });
                         const retryHeaders: Record<string, string> = {
                             'Accept': 'application/json',
                             'User-Agent': 'StudySwap-Mobile/1.0.0',
@@ -283,7 +355,22 @@ class ApiService {
                             },
                         };
 
+                        // Decode and log the JWT token being used for retry
+                        try {
+                            const payload = JSON.parse(atob(refreshResponse.accessToken.split('.')[1]));
+                            console.log('Retry JWT payload:', {
+                                subject: payload.sub,
+                                issuedAt: new Date(payload.iat * 1000).toISOString(),
+                                expiresAt: new Date(payload.exp * 1000).toISOString(),
+                                isExpired: Math.floor(Date.now() / 1000) >= payload.exp
+                            });
+                        } catch (e) {
+                            console.log('Could not decode retry JWT token:', e);
+                        }
+
                         const retryResponse = await fetch(url, retryConfig);
+                        console.log('Retry response status:', retryResponse.status);
+                        console.log('Retry response headers:', Object.fromEntries(retryResponse.headers.entries()));
 
                         if (!retryResponse.ok) {
                             const errorData = await retryResponse.json().catch(() => ({}));
@@ -316,9 +403,12 @@ class ApiService {
                         console.log('Refresh token is invalid, clearing tokens');
                         const { clearTokens } = await import('./tokenService');
                         await clearTokens();
+                        throw new ApiError('Your session has expired. Please log in again.', 401);
                     }
 
-                    throw new ApiError('Authentication failed. Please log in again.', 401);
+                    // For other refresh errors, don't clear tokens immediately
+                    console.log('Token refresh failed, but keeping tokens for retry');
+                    throw new ApiError('Authentication failed. Please try again.', 401);
                 } finally {
                     // Clear the refresh promise and flag so future requests can try again
                     this.refreshPromise = null;
@@ -520,7 +610,16 @@ class ApiService {
                 console.log('Token refreshed before delete, proceeding');
             } catch (refreshError: any) {
                 console.error('Token refresh failed before delete:', refreshError);
-                throw new ApiError('Authentication failed. Please log in again.', 401);
+
+                // If refresh token is invalid, clear tokens
+                if (refreshError.status === 401 || refreshError.message?.includes('Invalid or expired refresh token')) {
+                    console.log('Refresh token is invalid during delete, clearing tokens');
+                    const { clearTokens } = await import('./tokenService');
+                    await clearTokens();
+                    throw new ApiError('Your session has expired. Please log in again.', 401);
+                }
+
+                throw new ApiError('Authentication failed. Please try again.', 401);
             } finally {
                 this.refreshPromise = null;
                 this.isRefreshing = false;
@@ -572,7 +671,16 @@ class ApiService {
                 return;
             } catch (refreshError: any) {
                 console.error('Token refresh failed during delete:', refreshError);
-                throw new ApiError('Authentication failed. Please log in again.', 401);
+
+                // If refresh token is invalid, clear tokens
+                if (refreshError.status === 401 || refreshError.message?.includes('Invalid or expired refresh token')) {
+                    console.log('Refresh token is invalid during delete retry, clearing tokens');
+                    const { clearTokens } = await import('./tokenService');
+                    await clearTokens();
+                    throw new ApiError('Your session has expired. Please log in again.', 401);
+                }
+
+                throw new ApiError('Authentication failed. Please try again.', 401);
             } finally {
                 this.refreshPromise = null;
                 this.isRefreshing = false;
